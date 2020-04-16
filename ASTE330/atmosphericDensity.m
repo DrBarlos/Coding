@@ -1,0 +1,43 @@
+function rho = atmosphericDensity( h )
+%ATMOSPHERICDENSITY Answer the atmospheric density 
+%Input: 
+%   h:   Altitude, km
+%Output: 
+%   rho: Density, kg/m^2
+% Data taken from time-averaged curve in SMAD figure 8-2
+% Not valid for altitudes much less than 100 km or much greater than 1000
+% km
+
+data = [ ...
+    100, 4.0e-7; ...
+    125, 1.0e-8;  ...
+    163, 1.0e-9;  ...
+    200, 3.0e-10; ...
+    300, 2.5e-11; ...
+    400, 4.0e-12; ...
+    500, 9e-13;   ...
+    600, 2e-13;   ...
+    700, 5e-14;   ...
+    800, 2e-14;   ...
+    900, 8e-15;   ...
+    1000, 4.5e-15; ...
+    ];
+hValues = data(:,1);
+rhoLogValues = log( data(:,2) );
+
+didInterp = 0;
+for i2=2:length(hValues)
+    i1 = i2 - 1;
+    h1 = hValues(i1);
+    h2 = hValues(i2);
+    r1 = rhoLogValues(i1);
+    r2 = rhoLogValues(i2);
+    if h <= hValues(i2)
+        didInterp = 1;
+        break
+    end
+end
+r = r1 + (r2 - r1) * (h - h1) / (h2 - h1);
+rho = exp( r );
+
+    

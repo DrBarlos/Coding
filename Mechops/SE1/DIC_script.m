@@ -1,0 +1,163 @@
+%% Digital Image Correlation
+%{
+-----------------------------
+By Carlos A. Sanchez
+March 31, 2019
+This code produces a displacement plot based off image pairs, which can
+then be used to calculate image movement, in translation or rotation
+%}
+
+clear; close all; clc;
+
+%% Image Location Setup
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%  specify the working directory where the a/b image pair is stored
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+working_dir = 'C:\Users\Carlos\Documents\MATLAB\Mechops\SE1\ROT\';  % keep the "\" at the end
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Get the filenames of the a/b image pair in working_dir.  This will create
+% a structure where file names are images(1).name for img_a and,  
+% images(2).name for img_b.
+images = dir([working_dir,'img*.JPEG']);
+
+%% Image Pre-Processing
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%  Load img_a and img_b and Pre-Process image pair:
+%  flatten to 1D (grayscale) if the images are multidimensional (e.g., RGB)
+%  This block uses the function 'flatten_rgb_image' which we provided; make
+%  sure this function is in your Matlab path.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+for i = 1:length(images)
+    % load image data into a temporary variable
+    temp = imread([working_dir,images(i).name]);
+    % show original image
+
+	% Assign flattened (grayscale) image data to the structure "IMAGES"; 
+    % this data will be used for interrogation.
+    images(i).data = flatten_rgb_image(temp);
+end
+% End of image Pre-Processing setup
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+%% Correlation Parameter Setup
+%{
+Driving Parameters and Variables
+------------------------
+Mesh image offset           Off_x, Off_y
+Image Dimensions            m_img, n_img
+
+Driven Parameters
+------------------------
+Pattern Box Dimensions      Bx, By (Sizes for A and B Matrices)
+Search Box Dimensions       Sx> Bx, Sy> By
+Shift dimensions            SHIFTX, SHIFTY
+%}
+
+% These two parameters define window mesh of image 
+Off_x = 7; % Specifies offset from horizontal edges of image in terms of pixels
+Off_y = 7; % Specifies Offset from vertical edges of image in terms of pixels
+x_step = 20; % Specifies x mesh density
+y_step = 20; % Specifies y mesh density 
+
+%Gathering image size for 
+[m_img, n_img] = size(images(1).data);
+
+%These parameters are driven by image size and Offset
+Bx = floor((n_img - 2 * Off_x)/x_step); By = floor((m_img - 2 * Off_y)/y_step); % Defines array A
+%Dimesions from mesh parameters
+
+Sx = Bx + Off_x; Sy = By + Off_y;
+
+nx = 0.25; ny = 0.25; % Specifies frame density steps (as stated in paper, should be sub pixel accuracy!) 
+% for B array in search area (Larger steps lead to faster processing but less precision, 
+% smaller more precise but longer processing time)
+
+SHIFTX = floor((Sx - Bx)/nx); SHIFTY = floor((Sy - By)/ny); % Uses n_x and n_y to calculate 
+% pixel steps
+
+% C values setup
+D_val = ones(y_step,x_step,2); % Creates 3D array to store both x and y components of values for each point
+
+%% Figure Setup
+figure(1);
+h = subplot(1,2,1); 
+imshow(images(1).data); % Shows   
+title(images(1).name,'Interpreter','none'); hold on;
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%  For each image box in img_a, calculate the displacement.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+for p = 1:x_step
+    % progress indicator...
+    fprintf('%.0f%%...\n',100*p/x_step)
+    
+    for q = 1:y_step
+        % pixel array A
+        
+        uAx = Off_x + 1; % Sets x coord of upper left corner of array A
+        uAy = Off_y + 1; % Sets y coord of upper left corner of array A 
+        
+        A = double( images(1).data((uAy + By*(q-1)):(uAy + By*q),(uAx+Bx*(p-1)):(uAx+Bx*p)));  % specify array indices and convert to a double
+        % NOTE  : imshow does not like doubles, so imshow(uint8(A)) will display A nicely
+        A_avg = mean(A,'all');
+        
+        hold on
+        h;
+        r = rectangle('Position',[(uAx+Bx*(p-1)),(uAy + By*(q-1)), Bx, By],'EdgeColor','r');
+        hold off
+        drawnow limitrate
+        
+        % Find the displacement of A by correlating this pixel array with all 
+        % possible destinations B(K,L) in search box S of img_b.
+        for i = 1:SHIFTX  % x pixel shift within S
+            for j = 1:SHIFTY % y pixel shift within S
+                
+                % pixel array B      HINT: size(A) = size(B) < size(S)
+                B = double( images(2).data((Sy+i):(Sy+By+i),(Sx+j):(Sx+Bx+j)) ); % specify array indices within S and convert to a double
+                B_avg = mean(B,'all'); % Calculates average of frame size
+                
+                % Calculate the correlation coefficient, C, for this pixel array.
+                % Evaluate C at all possible locations (index shifts I,J).
+                % The best correlation determines the displacement of A into img_b.
+				%  Note: Double sum below effectively implements Double Riemann sum across k and l in lecture
+                C(i, j) = sum(sum( (A - A_avg).*(B - B_avg) ))/...
+                          sqrt(sum(sum( (A - A_avg).^2 ))*sum(sum( (B - B_avg).^2 )));
+                [c_m, c_n]= size(C);
+                c_max = max(max(C)); % Obtains maximum from C matrix
+                [ym, xm] = find(C == c_max); % Obtains index from C matrix
+                cf_x = Sx/c_n; % Calculates conversion factor from c_n to pixels
+                cf_y = Sy/c_m; % Calculates conversion factor from c_m to pixels
+                D_val(p,q,1) = cf_y * (ym - floor(c_m/2))/c_m; %Stores y displacement components in 2nd index
+                D_val(p,q,2) = cf_x * (xm - floor(c_n/2))/c_n; %Stores x displacement components in 1st index
+                
+            end % j
+        end % i
+    end % q
+end % p
+
+fprintf('Processing complete!\n')
+
+%% Plotting the Calculations
+% Calculations
+[m_img, n_img] = size(images(2).data); %Repurposes variables m_ing and n_img for b image plot
+xb = linspace(1,n_img,x_step); yb = linspace(1,m_img,y_step);
+[xb, yb] = meshgrid(xb,yb);
+D_avgx = mean(D_val(:,:,1),'all');
+D_avgy = mean(D_val(:,:,2),'all');
+D_val(:,:,1) = D_avgx * ones(y_step,x_step);
+D_val(:,:,2) = D_avgy * ones(y_step,x_step);
+
+%% Plotting Displacement Field
+subplot(1,2,2);
+imshow(images(2).data); % show image 
+hold on;         % hold figure
+quiver(xb, yb, D_val(:,:,1), D_val(:,:,2),'Color','g');   % plot displacement vectors
+
+%% Final Calculations
+dispx = 4/91 * D_avgx;
+dispy = 4/91 * D_avgy;
+fprintf('The displacement in x is %.000000f%\n mm',dispx)
+fprintf('The displacement in x is %.000000f%\n mm',dispy)

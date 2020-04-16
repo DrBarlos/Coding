@@ -1,0 +1,21 @@
+# Temperature in a temperature-controlled room measured at
+# 5-sec intervals over a period of 80 seconds.
+#-------------------------------------------------------------
+# Time[s] Temperature[K]
+0	293.5
+5	294.9
+10	293.9
+15	293.5
+20	293.5
+25	293.8
+30	293.7
+35	294.3
+40	294.3
+45	294.4
+50	293.9
+55	294.1
+60	294.4
+65	292.6
+70	294.3
+75	293.9
+80	294.2
